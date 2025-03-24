@@ -1,6 +1,8 @@
 import math
 import pygame
 import sys
+import random
+import copy
 from heapq import heappush, heappop
 
 # Константы для отображения
@@ -102,6 +104,137 @@ class Dijkstra:
             current = self.previous.get(current)
         return list(reversed(path))
 
+def generate_maze_obstacles(grid_size, start, goal, wall_density=0.3):
+    """Генерирует лабиринт из препятствий
+    
+    Args:
+        grid_size: размер сетки
+        start: начальная точка (x, y)
+        goal: целевая точка (x, y)
+        wall_density: плотность препятствий (0.0 - 1.0)
+        
+    Returns:
+        list: список координат препятствий
+    """
+    obstacles = []
+    
+    # Создаем препятствия с заданной плотностью
+    for i in range(grid_size):
+        for j in range(grid_size):
+            # Проверяем, что точка не является стартом или целью
+            if (i, j) != start and (i, j) != goal:
+                # Проверяем, что точка не слишком близко к старту или цели
+                start_dist = math.sqrt((i - start[0])**2 + (j - start[1])**2)
+                goal_dist = math.sqrt((i - goal[0])**2 + (j - goal[1])**2)
+                
+                if start_dist > 3 and goal_dist > 3 and random.random() < wall_density:
+                    obstacles.append((i, j))
+    
+    # Добавляем внешние стены
+    for i in range(grid_size):
+        if (i, 0) != start and (i, 0) != goal:
+            obstacles.append((i, 0))
+        if (i, grid_size-1) != start and (i, grid_size-1) != goal:
+            obstacles.append((i, grid_size-1))
+    
+    for j in range(grid_size):
+        if (0, j) != start and (0, j) != goal:
+            obstacles.append((0, j))
+        if (grid_size-1, j) != start and (grid_size-1, j) != goal:
+            obstacles.append((grid_size-1, j))
+    
+    return obstacles
+
+def check_path_exists(dijkstra_instance):
+    """Проверяет, существует ли путь от начала к концу"""
+    # Создаем глубокую копию для безопасной проверки
+    dijkstra_copy = copy.deepcopy(dijkstra_instance)
+    
+    # Запускаем алгоритм до завершения
+    while dijkstra_copy.step():
+        if dijkstra_copy.path_complete:
+            return True
+    
+    return False
+
+def create_maze_with_pattern():
+    """Создаёт лабиринт с более структурированным паттерном и гарантированным путём"""
+    obstacles = []
+    
+    # Добавляем внешние стены
+    for i in range(GRID_SIZE):
+        obstacles.append((i, 0))
+        obstacles.append((i, GRID_SIZE-1))
+    
+    for j in range(GRID_SIZE):
+        obstacles.append((0, j))
+        obstacles.append((GRID_SIZE-1, j))
+    
+    # Создаем горизонтальные стены с проходами
+    for i in range(5, GRID_SIZE-5, 6):
+        passage = random.randint(2, GRID_SIZE-3)
+        for j in range(1, GRID_SIZE-1):
+            if j != passage and j != passage+1:
+                obstacles.append((i, j))
+    
+    # Создаем вертикальные стены с проходами
+    for j in range(5, GRID_SIZE-5, 6):
+        passage = random.randint(2, GRID_SIZE-3)
+        for i in range(1, GRID_SIZE-1):
+            if i != passage and i != passage+1:
+                obstacles.append((i, j))
+    
+    # Добавляем случайные острова препятствий
+    for _ in range(8):  # Уменьшаем количество островов для большей проходимости
+        island_x = random.randint(5, GRID_SIZE-6)
+        island_y = random.randint(5, GRID_SIZE-6)
+        
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                if random.random() < 0.6:  # Уменьшаем вероятность препятствия для большей проходимости
+                    obstacles.append((island_x + dx, island_y + dy))
+    
+    # Определяем начальную и конечную точки
+    start = (5, 5)
+    goal = (GRID_SIZE-6, GRID_SIZE-6)
+    
+    # Убираем препятствия рядом с начальной и конечной точками
+    filtered_obstacles = []
+    for obs in obstacles:
+        start_dist = math.sqrt((obs[0] - start[0])**2 + (obs[1] - start[1])**2)
+        goal_dist = math.sqrt((obs[0] - goal[0])**2 + (obs[1] - goal[1])**2)
+        
+        if start_dist > 3 and goal_dist > 3:  # Увеличиваем зону без препятствий
+            filtered_obstacles.append(obs)
+    
+    # Проверяем, существует ли путь от начала к концу
+    temp_dijkstra = Dijkstra(start, goal, filtered_obstacles)
+    path_exists = check_path_exists(temp_dijkstra)
+    
+    # Если путь не существует, пробуем удалить препятствия до тех пор,
+    # пока путь не появится
+    if not path_exists:
+        # Создаем список препятствий, которые могут быть удалены
+        # (не внешние стены)
+        removable_obstacles = [obs for obs in filtered_obstacles 
+                              if obs[0] != 0 and obs[0] != GRID_SIZE-1 
+                              and obs[1] != 0 and obs[1] != GRID_SIZE-1]
+        
+        # Перемешиваем список для случайного порядка удаления
+        random.shuffle(removable_obstacles)
+        
+        # Постепенно удаляем препятствия, пока не появится путь
+        for obs in removable_obstacles:
+            # Удаляем препятствие из списка
+            filtered_obstacles.remove(obs)
+            
+            # Проверяем, существует ли теперь путь
+            temp_dijkstra = Dijkstra(start, goal, filtered_obstacles)
+            if check_path_exists(temp_dijkstra):
+                break
+    
+    return filtered_obstacles, start, goal
+
 def main():
     try:
         # Инициализация pygame
@@ -115,10 +248,8 @@ def main():
         
         clock = pygame.time.Clock()
         
-        # Определяем начальную точку, целевую точку и препятствия
-        start = (5, 5)
-        goal = (35, 35)
-        obstacles = [(20, 20), (25, 25), (30, 30)]
+        # Используем функцию создания лабиринта с гарантией пути
+        obstacles, start, goal = create_maze_with_pattern()
         
         # Создаем объект алгоритма Дейкстры
         dijkstra = Dijkstra(start, goal, obstacles)
@@ -127,10 +258,11 @@ def main():
         print(f"Целевая точка: {goal}")
         print(f"Количество препятствий: {len(obstacles)}")
         print("Нажмите ESC для выхода")
+        print("Нажмите R для перегенерации лабиринта")
         
         running = True
         last_update_time = pygame.time.get_ticks()
-        update_interval = 50  # миллисекунды между обновлениями
+        update_interval = 5  # Еще быстрее, 5 мс между обновлениями
         
         while running:
             current_time = pygame.time.get_ticks()
@@ -141,6 +273,11 @@ def main():
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         running = False
+                    elif event.key == pygame.K_r:
+                        # Перегенерация лабиринта с гарантией пути
+                        obstacles, start, goal = create_maze_with_pattern()
+                        dijkstra = Dijkstra(start, goal, obstacles)
+                        print(f"Лабиринт перегенерирован. Препятствий: {len(obstacles)}")
             
             screen.fill(WHITE)
             
@@ -152,14 +289,8 @@ def main():
             
             # Отрисовка препятствий
             for obs in obstacles:
-                pygame.draw.circle(screen, RED, 
-                                 (int(obs[1]*CELL_SIZE + CELL_SIZE/2),
-                                  int(obs[0]*CELL_SIZE + CELL_SIZE/2)),
-                                 CELL_SIZE//2)
-                pygame.draw.circle(screen, (139, 0, 0),
-                                 (int(obs[1]*CELL_SIZE + CELL_SIZE/2),
-                                  int(obs[0]*CELL_SIZE + CELL_SIZE/2)),
-                                 CELL_SIZE//2, 2)
+                pygame.draw.rect(screen, RED, 
+                               (obs[1]*CELL_SIZE, obs[0]*CELL_SIZE, CELL_SIZE, CELL_SIZE))
             
             # Отрисовка начальной точки
             pygame.draw.circle(screen, GREEN,
@@ -203,11 +334,11 @@ def main():
                         print(f"Путь построен! Количество шагов: {dijkstra.step_count}")
                         print(f"Длина пути: {len(dijkstra.current_path)}")
                 else:
-                    print("Путь не найден")
+                    print("Путь не найден - такого не должно быть при корректной генерации лабиринта")
                     dijkstra.path_complete = True
             
             pygame.display.flip()
-            clock.tick(30)
+            clock.tick(60)
         
         pygame.quit()
         
