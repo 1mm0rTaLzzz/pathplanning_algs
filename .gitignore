@@ -175,3 +175,5 @@ cython_debug/
 RRT/map.png
 RRTstar/map.png
 genetic_algorithm/results/
+.DS_Store
+genetic_algorithm/.DS_Store
