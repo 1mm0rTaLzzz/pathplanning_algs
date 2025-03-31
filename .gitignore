@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 RRT/map.png
 RRTstar/map.png
+genetic_algorithm/results/
